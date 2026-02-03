@@ -1,3 +1,8 @@
+// apps/bot/src/events/interactionCreate.js
+// ✅ Button handler: verify_start -> เช็คว่าได้ verify role แล้วไหม -> ถ้าได้แล้วห้ามทำซ้ำ
+// ✅ verify_help -> ตอบวิธีใช้งาน
+// ✅ กันบอท crash ด้วย try/catch
+
 import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 export default {
@@ -21,7 +26,7 @@ export default {
           ephemeral: true,
           content:
             "🆘 วิธี Verify (สั้นๆ)\n" +
-            "1) กด **Verify ตอนนี้**\n" +
+            "1) กดปุ่ม **Verify ตอนนี้**\n" +
             "2) ล็อกอิน Discord\n" +
             "3) ติ๊ก Turnstile\n" +
             "4) ได้ยศอัตโนมัติ ✅\n\n" +
@@ -36,7 +41,41 @@ export default {
         return interaction.reply({ content: "ปุ่มนี้ใช้ในเซิร์ฟเวอร์เท่านั้น", ephemeral: true });
       }
 
-      // ✅ create session
+      // =========================
+      // ✅ 1) โหลด verify-config
+      // =========================
+      const cfgRes = await fetch(`${process.env.API_BASE_URL}/api/guilds/${interaction.guildId}/verify-config`, {
+        method: "GET",
+        headers: {
+          "X-BOT-AUTH": process.env.INTERNAL_BOT_SECRET
+        }
+      });
+
+      let roleIds = [];
+      if (cfgRes.ok) {
+        const cfg = await cfgRes.json();
+        roleIds = Array.isArray(cfg.roleIds) ? cfg.roleIds : [];
+      }
+
+      // ✅ ใช้ role ตัวแรกเป็น verify role หลัก (ง่ายสุด)
+      const verifyRoleId = roleIds[0];
+
+      // =========================
+      // ✅ 2) ถ้ามี role แล้ว -> ห้ามทำซ้ำ
+      // =========================
+      if (verifyRoleId) {
+        const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (member && member.roles.cache.has(verifyRoleId)) {
+          return interaction.reply({
+            ephemeral: true,
+            content: "✅ คุณได้ยศ Verify แล้ว ไม่ต้องยืนยันซ้ำครับ"
+          });
+        }
+      }
+
+      // =========================
+      // ✅ 3) create session
+      // =========================
       const res = await fetch(`${process.env.API_BASE_URL}/api/verify/session`, {
         method: "POST",
         headers: {
@@ -56,9 +95,9 @@ export default {
 
       const { sid } = await res.json();
 
-      // ✅ build frontend link from ENV
+      // ✅ build frontend link from ENV (สำคัญ)
       const FRONT = process.env.FRONTEND_URL;
-      if (!FRONT) throw new Error("FRONTEND_URL missing in bot env");
+      if (!FRONT) throw new Error("FRONTEND_URL missing in bot .env");
 
       const url = `${FRONT.replace(/\/$/, "")}/verify/start?sid=${encodeURIComponent(sid)}`;
 

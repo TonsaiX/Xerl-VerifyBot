@@ -22,11 +22,6 @@ function addMs(ms) {
   return new Date(Date.now() + ms);
 }
 
-/** ✅ helper: url join */
-function joinUrl(base, path) {
-  return `${String(base).replace(/\/$/, "")}${path}`;
-}
-
 /** ✅ internal auth from bot */
 function requireBotAuth(req, res, next) {
   const got = req.headers["x-bot-auth"];
@@ -61,9 +56,8 @@ router.post("/api/verify/session", requireBotAuth, async (req, res) => {
 });
 
 /**
- * ✅ 2) Web entry page (optional)
+ * ✅ 2) Web entry page
  * GET /verify/start?sid=...
- * redirect ไป /auth/discord/login?sid=...
  */
 router.get("/verify/start", async (req, res) => {
   const sid = String(req.query.sid || "");
@@ -96,10 +90,12 @@ router.get("/auth/discord/login", async (req, res) => {
   // ✅ create OAuth state
   const state = hex(16);
   const stateExpires = addMs(10 * 60 * 1000);
-  await pool.query(
-    `INSERT INTO oauth_states (state, sid, expires_at) VALUES ($1, $2, $3)`,
-    [state, sid, stateExpires]
-  );
+
+  await pool.query(`INSERT INTO oauth_states (state, sid, expires_at) VALUES ($1, $2, $3)`, [
+    state,
+    sid,
+    stateExpires
+  ]);
 
   const redirectUri = process.env.DISCORD_REDIRECT_URI;
   const clientId = process.env.DISCORD_CLIENT_ID;
@@ -130,10 +126,7 @@ router.get("/auth/discord/callback", async (req, res) => {
   if (!code || !state) return res.status(400).send("Missing code/state");
 
   // ✅ validate state
-  const st = await pool.query(
-    `SELECT state, sid, expires_at FROM oauth_states WHERE state=$1`,
-    [state]
-  );
+  const st = await pool.query(`SELECT state, sid, expires_at FROM oauth_states WHERE state=$1`, [state]);
   if (st.rowCount === 0) return res.status(400).send("Invalid state");
   if (new Date(st.rows[0].expires_at).getTime() < Date.now()) return res.status(400).send("State expired");
 
@@ -172,14 +165,16 @@ router.get("/auth/discord/callback", async (req, res) => {
   const meRes = await fetch("https://discord.com/api/users/@me", {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
+
   if (!meRes.ok) {
     const t = await meRes.text();
     return res.status(400).send("Fetch user failed: " + t);
   }
+
   const me = await meRes.json();
   const userId = String(me.id || "");
 
-  // ✅ ensure user who logged in matches expected_user_id (คนที่กดปุ่ม)
+  // ✅ ensure user matches who clicked verify
   if (userId !== String(sess.expected_user_id)) {
     return res.status(403).send("This login is not the same account who started verify.");
   }
@@ -220,6 +215,7 @@ router.post("/api/verify/complete", async (req, res) => {
   );
 
   if (tr.rowCount === 0) return res.status(400).json({ error: "invalid token" });
+
   const wt = tr.rows[0];
 
   if (wt.used) return res.status(400).json({ error: "token used" });
@@ -244,31 +240,43 @@ router.post("/api/verify/complete", async (req, res) => {
   }
 
   // ✅ get roles config
-  const cfg = await pool.query(
-    `SELECT role_ids FROM guild_verify_config WHERE guild_id=$1`,
-    [wt.guild_id]
-  );
-  const roleIds = cfg.rowCount ? (cfg.rows[0].role_ids || []) : [];
+  const cfg = await pool.query(`SELECT role_ids FROM guild_verify_config WHERE guild_id=$1`, [wt.guild_id]);
+  const roleIds = cfg.rowCount ? cfg.rows[0].role_ids || [] : [];
+
   if (!Array.isArray(roleIds)) {
     return res.status(500).json({ error: "role_ids invalid in db" });
   }
 
+  // ✅ กันซ้ำ: ถ้าเคย verified แล้ว ไม่ต้องทำซ้ำ
+  const already = await pool.query(`SELECT 1 FROM verified_users WHERE guild_id=$1 AND user_id=$2`, [
+    wt.guild_id,
+    wt.user_id
+  ]);
+
+  if (already.rowCount > 0) {
+    await pool.query(`UPDATE web_verify_tokens SET used=true WHERE token=$1`, [token]);
+    await pool.query(`UPDATE verify_sessions SET used=true WHERE sid=$1`, [wt.sid]);
+
+    return res.json({
+      ok: true,
+      alreadyVerified: true,
+      guildId: wt.guild_id,
+      userId: wt.user_id,
+      roleIds
+    });
+  }
+
   // ✅ assign roles via Discord Bot token (API side)
-  // (ง่ายสุดให้ flow จบ โดยไม่ต้องเรียก bot service)
   const botToken = process.env.DISCORD_BOT_TOKEN;
   if (!botToken) return res.status(500).json({ error: "missing DISCORD_BOT_TOKEN in API env" });
 
-  // ✅ add roles one by one
   for (const roleId of roleIds) {
-    await fetch(
-      `https://discord.com/api/v10/guilds/${wt.guild_id}/members/${wt.user_id}/roles/${roleId}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `Bot ${botToken}`
-        }
+    await fetch(`https://discord.com/api/v10/guilds/${wt.guild_id}/members/${wt.user_id}/roles/${roleId}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bot ${botToken}`
       }
-    );
+    });
   }
 
   // ✅ mark verified

@@ -1,5 +1,5 @@
 // apps/api/src/routes/guilds.js
-// ✅ routes สำหรับ bot ตั้งค่า role ต่อ guild
+// ✅ routes สำหรับ bot ตั้งค่า role ต่อ guild + ดึง verify config
 
 import express from "express";
 import { pool } from "../db.js";
@@ -41,6 +41,20 @@ router.put("/guilds/:guildId/verify-config", requireBotAuth, async (req, res) =>
   );
 
   return res.json({ ok: true, guildId, roleIds });
+});
+
+/**
+ * GET /api/guilds/:guildId/verify-config
+ * headers: X-BOT-AUTH
+ * return: { roleIds: string[] }
+ */
+router.get("/guilds/:guildId/verify-config", requireBotAuth, async (req, res) => {
+  const { guildId } = req.params;
+
+  const r = await pool.query(`SELECT role_ids FROM guild_verify_config WHERE guild_id=$1`, [guildId]);
+  const roleIds = r.rowCount ? r.rows[0].role_ids || [] : [];
+
+  return res.json({ roleIds: Array.isArray(roleIds) ? roleIds : [] });
 });
 
 export default router;
