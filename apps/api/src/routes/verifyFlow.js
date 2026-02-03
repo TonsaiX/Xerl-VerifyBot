@@ -202,6 +202,8 @@ router.post("/verify/complete", async (req, res) => {
     [String(guildId), String(userId)]
   );
 
+  console.log("verify complete body:", req.body);
+
   return res.json({ ok: true, guildId, userId, rolesGiven: roleIds });
 });
 
