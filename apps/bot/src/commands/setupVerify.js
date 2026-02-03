@@ -65,7 +65,9 @@ export async function execute(interaction) {
     )
     .addFields(
       { name: "ขั้นตอน", value: "1) กด Verify\n2) ล็อกอิน Discord\n3) ติ๊ก Turnstile\n4) ได้ยศอัตโนมัติ", inline: false },
-      { name: "ยศที่จะได้รับ", value: roleIds.map((id) => `<@&${id}>`).join(" ") || "ยังไม่ได้ตั้ง", inline: false }
+      //{ name: "ยศที่จะได้รับ", value: roleIds.map((id) => `<@&${id}>`).join(" ") || "ยังไม่ได้ตั้ง", inline: false }
+      { name: "ยศที่จะได้รับ", value: roleIds.length > 0 ? `<@&${roleIds[0]}>` : "ยังไม่ได้ตั้ง", inline: false }
+
     )
     .setFooter({ text: "Secure Verify • กดปุ่มแล้วทำตามหน้าเว็บ" });
 
