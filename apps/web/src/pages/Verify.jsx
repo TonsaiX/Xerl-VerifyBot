@@ -1,215 +1,115 @@
 // apps/web/src/pages/Verify.jsx
+// ✅ หน้า Verify: รับ token จาก query -> Turnstile -> POST complete ไป API
+
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { API_BASE, APP_NAME } from "../config.js";
-
-// ✅ ถ้าพาวาใช้ Turnstile แบบ script + widget ภายนอกอยู่แล้ว
-// ให้ส่ง turnstileToken มาที่ setTurnstileToken(...) ตรงนี้
-// (โค้ดนี้ไม่ผูก library ใดๆ เพื่อให้ "React ธรรมดา" จริง)
-
-function useQuery() {
-  const { search } = useLocation();
-  return useMemo(() => new URLSearchParams(search), [search]);
-}
+import { apiPost } from "../api.js";
 
 export default function Verify() {
-  const navigate = useNavigate();
-  const q = useQuery();
-
-  const token = q.get("token") || "";
-  const [turnstileToken, setTurnstileToken] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("ready");
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("พร้อมยืนยัน");
+  const [tsToken, setTsToken] = useState("");
 
-  // ✅ ถ้าไม่มี token ให้แจ้งชัด
+  const token = useMemo(() => new URL(window.location.href).searchParams.get("token") || "", []);
+
   useEffect(() => {
     if (!token) {
-      setError("ไม่พบ token (ลิงก์ไม่ถูกต้อง) กรุณากด Verify จาก Discord ใหม่");
+      window.location.href = "/error?m=" + encodeURIComponent("Missing token");
+      return;
+    }
+
+    // ✅ Turnstile callbacks
+    window.__xerlTurnstileOk = (t) => {
+      setTsToken(t);
+      setError("");
+    };
+    window.__xerlTurnstileExpired = () => setTsToken("");
+    window.__xerlTurnstileError = () => {
+      setTsToken("");
+      setError("Turnstile โหลดไม่สำเร็จ (เช็ค domain/ส่วนขยายบล็อกโฆษณา)");
+    };
+
+    // ✅ Load script once
+    if (!document.querySelector('script[data-xerl-turnstile="1"]')) {
+      const s = document.createElement("script");
+      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+      s.async = true;
+      s.defer = true;
+      s.setAttribute("data-xerl-turnstile", "1");
+      document.body.appendChild(s);
     }
   }, [token]);
 
-  // ✅ ตัวอย่าง: ถ้าพาวาใช้ Turnstile widget แล้วเรียก callback ได้
-  // ให้เอา callback นั้นมา setTurnstileToken
-  // window.__setTurnstile = (t) => setTurnstileToken(t);
-
-  async function handleSubmit() {
+  async function onSubmit() {
+    setStatus("working");
     setError("");
 
-    if (!API_BASE) {
-      setError("API_BASE (VITE_API_BASE_URL) ยังไม่ถูกตั้งค่า");
-      return;
-    }
-    if (!token) {
-      setError("ไม่พบ token กรุณากด Verify จาก Discord ใหม่");
-      return;
-    }
-    if (!turnstileToken) {
+    if (!tsToken) {
+      setStatus("ready");
       setError("กรุณายืนยัน Turnstile ก่อน");
       return;
     }
 
     try {
-      setLoading(true);
-      setStatus("กำลังยืนยัน...");
-
-      const res = await fetch(`${API_BASE.replace(/\/$/, "")}/api/verify/complete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          turnstileToken
-        })
+      const out = await apiPost("/api/verify/complete", {
+        token,
+        turnstileToken: tsToken
       });
 
-      const data = await res.json().catch(() => ({}));
-
-      // ✅ ถ้า API ตอบ error (เช่น assign role failed) ให้โชว์เลย
-      if (!res.ok) {
-        setStatus("ยืนยันไม่สำเร็จ");
-        const msg =
-          data?.error ||
-          data?.message ||
-          "เกิดข้อผิดพลาดในการยืนยัน (ดูรายละเอียดใน Network → /api/verify/complete)";
-        setError(typeof data === "string" ? data : JSON.stringify(data, null, 2) || msg);
-        return;
-      }
-
-      setStatus("ยืนยันสำเร็จ");
-
-      // ✅ สำเร็จแล้วค่อยไปหน้า verified (ห้ามข้ามขั้น!)
-      const guildId = data.guildId || "";
-      navigate(`/verified?g=${encodeURIComponent(guildId)}`, { replace: true });
+      window.location.href = "/verified?g=" + encodeURIComponent(out.guildId);
     } catch (e) {
-      setStatus("ยืนยันไม่สำเร็จ");
-      setError(String(e?.message || e));
-    } finally {
-      setLoading(false);
+      setStatus("ready");
+      setError(String(e.message || e));
     }
   }
 
+  const ready = Boolean(tsToken);
+
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <div style={styles.header}>
-          <div style={styles.icon}>✅</div>
-          <div>
-            <div style={styles.title}>ยืนยันตัวตน</div>
-            <div style={styles.sub}>
-              ล็อกอิน Discord แล้วติ๊ก Turnstile จากนั้นกด “ยืนยัน” เพื่อรับยศอัตโนมัติ
+    <div className="page">
+      <div className="card">
+        <div className="cardHeader">
+          <div className="titleRow">
+            <div className="badge">🔐</div>
+            <h1 className="h1">ยืนยันตัวตน</h1>
+          </div>
+          <p className="sub">ล็อกอิน Discord แล้วติ๊ก Turnstile — เสร็จแล้วระบบจะให้ยศอัตโนมัติ</p>
+        </div>
+
+        <div className="cardBody">
+          <div className="pillRow">
+            <div className="pill">Discord Login ✓</div>
+            <div className="pill">
+              Turnstile:{" "}
+              <span className={ready ? "stateOk" : "stateBad"}>{ready ? "พร้อมแล้ว" : "ยังไม่ผ่าน"}</span>
             </div>
           </div>
-        </div>
 
-        <div style={styles.row}>
-          <span style={styles.badge}>สถานะ: {status}</span>
-        </div>
+          <div
+            className="cf-turnstile"
+            data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+            data-callback="__xerlTurnstileOk"
+            data-expired-callback="__xerlTurnstileExpired"
+            data-error-callback="__xerlTurnstileError"
+          />
 
-        {/* ✅ Turnstile area (พาวาเอา widget จริงมายัดตรงนี้ได้เลย) */}
-        <div style={styles.turnstileBox}>
-          <div style={styles.turnstileHint}>
-            Turnstile: {turnstileToken ? "พร้อมแล้ว ✅" : "ยังไม่ยืนยัน"}
+          <div className="ctaRow">
+            <button className="btn" onClick={onSubmit} disabled={status === "working"}>
+              {status === "working" ? "กำลังตรวจสอบ..." : "ยืนยัน"}
+            </button>
+            <div className="miniStatus">
+              สถานะ:{" "}
+              <b className={ready ? "stateOk" : "stateBad"}>{ready ? "พร้อมยืนยัน" : "รอ Turnstile"}</b>
+            </div>
           </div>
 
-          {/* ✅ ปุ่มนี้ไว้ทดสอบเฉยๆ (อย่าลืมลบเมื่อใช้ widget จริง) */}
-          <button
-            style={styles.fakeTurnstileBtn}
-            onClick={() => setTurnstileToken("TEST_TOKEN")}
-            disabled={loading}
-          >
-            (ทดสอบ) ใส่ Turnstile Token
-          </button>
+          {error && <div className="errorBox">{error}</div>}
         </div>
 
-        <button style={styles.btn} onClick={handleSubmit} disabled={loading || !token}>
-          {loading ? "กำลังยืนยัน..." : "ยืนยัน"}
-        </button>
-
-        {error ? <pre style={styles.error}>{error}</pre> : null}
-
-        <div style={styles.footer}>
-          <span>{APP_NAME}</span>
+        <div className="footer">
+          <span>Secure Verify</span>
+          <a className="mutedLink" href="/">กลับหน้าแรก</a>
         </div>
       </div>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    display: "grid",
-    placeItems: "center",
-    padding: 24,
-    background:
-      "radial-gradient(1000px 500px at 20% 10%, rgba(60,100,255,0.18), transparent), radial-gradient(800px 500px at 80% 20%, rgba(0,200,160,0.14), transparent), #070a10"
-  },
-  card: {
-    width: "min(520px, 92vw)",
-    borderRadius: 18,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.06)",
-    boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
-    backdropFilter: "blur(16px)",
-    padding: 18
-  },
-  header: { display: "flex", gap: 12, alignItems: "center", marginBottom: 12 },
-  icon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    display: "grid",
-    placeItems: "center",
-    background: "rgba(255,255,255,0.10)",
-    border: "1px solid rgba(255,255,255,0.12)"
-  },
-  title: { color: "white", fontSize: 20, fontWeight: 800 },
-  sub: { color: "rgba(255,255,255,0.72)", fontSize: 13, marginTop: 4, lineHeight: 1.4 },
-  row: { display: "flex", gap: 10, margin: "10px 0 14px" },
-  badge: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 12,
-    padding: "6px 10px",
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.10)"
-  },
-  turnstileBox: {
-    borderRadius: 14,
-    border: "1px dashed rgba(255,255,255,0.18)",
-    padding: 12,
-    marginBottom: 12
-  },
-  turnstileHint: { color: "rgba(255,255,255,0.8)", fontSize: 13, marginBottom: 10 },
-  fakeTurnstileBtn: {
-    width: "100%",
-    borderRadius: 12,
-    padding: "10px 12px",
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    color: "white",
-    cursor: "pointer"
-  },
-  btn: {
-    width: "100%",
-    borderRadius: 12,
-    padding: "12px 14px",
-    background: "rgba(255,255,255,0.14)",
-    border: "1px solid rgba(255,255,255,0.16)",
-    color: "white",
-    fontWeight: 800,
-    cursor: "pointer"
-  },
-  error: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    background: "rgba(255,70,70,0.10)",
-    border: "1px solid rgba(255,70,70,0.25)",
-    color: "rgba(255,230,230,0.92)",
-    whiteSpace: "pre-wrap",
-    overflowX: "auto",
-    fontSize: 12
-  },
-  footer: { marginTop: 12, color: "rgba(255,255,255,0.45)", fontSize: 12, textAlign: "center" }
-};
