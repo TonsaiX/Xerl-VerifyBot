@@ -15,12 +15,28 @@ const app = express();
 app.use(express.json());
 
 // ✅ CORS ให้ React เรียก API ได้
+// ✅ CORS: รองรับทั้ง dev + prod ผ่าน ENV
+const allowedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: (origin, cb) => {
+      // ✅ อนุญาต non-browser (เช่น curl/postman) ที่ไม่มี origin
+      if (!origin) return cb(null, true);
+
+      // ✅ อนุญาต origin ที่อยู่ใน whitelist
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+
+      // ❌ ไม่อยู่ในลิสต์ = block
+      return cb(new Error(`CORS blocked: ${origin}`));
+    },
     credentials: false,
   })
 );
+
 
 // ✅ health check
 app.get("/health", (req, res) => res.json({ ok: true }));
