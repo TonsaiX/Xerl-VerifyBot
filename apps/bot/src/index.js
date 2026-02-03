@@ -1,7 +1,3 @@
-// apps/bot/src/index.js
-// ✅ Discord bot main (Windows/Railway ESM safe)
-// ✅ กันพัง: ตรวจ event module ก่อนเรียกใช้
-
 import "dotenv/config";
 import { Client, Collection, GatewayIntentBits } from "discord.js";
 import fs from "node:fs";
@@ -12,38 +8,28 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-
-// ✅ commands map
 client.commands = new Collection();
 
-// =====================
-// ✅ load commands
-// =====================
+// ===== load commands =====
 const commandsPath = path.join(__dirname, "commands");
 for (const file of fs.readdirSync(commandsPath).filter((f) => f.endsWith(".js"))) {
   const filePath = path.join(commandsPath, file);
   const mod = await import(pathToFileURL(filePath).href);
 
-  // ✅ ต้องมี export data + execute
   if (!mod?.data?.name || typeof mod.execute !== "function") {
     console.warn(`⚠️ Skip command (invalid export): ${file}`);
     continue;
   }
-
   client.commands.set(mod.data.name, mod);
 }
 
-// =====================
-// ✅ load events
-// =====================
+// ===== load events =====
 const eventsPath = path.join(__dirname, "events");
 for (const file of fs.readdirSync(eventsPath).filter((f) => f.endsWith(".js"))) {
   const filePath = path.join(eventsPath, file);
   const mod = await import(pathToFileURL(filePath).href);
 
-  // ✅ event ต้อง export default เป็น object { name, execute, once? }
   const ev = mod?.default;
-
   if (!ev || !ev.name || typeof ev.execute !== "function") {
     console.warn(`⚠️ Skip event (invalid export): ${file}`);
     continue;
