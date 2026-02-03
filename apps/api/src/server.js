@@ -18,24 +18,29 @@ app.use(express.json());
 // ✅ CORS: รองรับทั้ง dev + prod ผ่าน ENV
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
-  .map((s) => s.trim())
+  .map(s => s.trim())
   .filter(Boolean);
 
 app.use(
   cors({
-    origin: (origin, cb) => {
-      // ✅ อนุญาต non-browser (เช่น curl/postman) ที่ไม่มี origin
-      if (!origin) return cb(null, true);
+    origin: (origin, callback) => {
+      // allow non-browser requests
+      if (!origin) return callback(null, true);
 
-      // ✅ อนุญาต origin ที่อยู่ใน whitelist
-      if (allowedOrigins.includes(origin)) return cb(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-      // ❌ ไม่อยู่ในลิสต์ = block
-      return cb(new Error(`CORS blocked: ${origin}`));
+      console.log("❌ CORS blocked origin:", origin);
+      return callback(null, false); // ❌ ห้าม throw error
     },
-    credentials: false,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-BOT-AUTH"],
   })
 );
+
+// ✅ สำคัญ: ตอบ OPTIONS ทุก route
+app.options("*", cors());
 
 
 // ✅ health check
