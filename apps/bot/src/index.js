@@ -13,33 +13,44 @@ const client = new Client({
 
 client.commands = new Collection();
 
-/* ================= COMMANDS ================= */
+/* =======================
+   LOAD COMMANDS
+======================= */
 const commandsPath = path.join(__dirname, "commands");
-for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"))) {
+for (const file of fs.readdirSync(commandsPath)) {
+  if (!file.endsWith(".js")) continue;
+
   const filePath = path.join(commandsPath, file);
+  const mod = await import(pathToFileURL(filePath).href);
 
-  // ✅ FIX: Windows ESM ต้องแปลงเป็น file://
-  const command = await import(pathToFileURL(filePath).href);
+  if (!mod?.data?.name || typeof mod.execute !== "function") {
+    console.warn(`⚠️ Skip command (invalid export): ${file}`);
+    continue;
+  }
 
-  client.commands.set(command.data.name, command);
+  client.commands.set(mod.data.name, mod);
 }
 
-/* ================= EVENTS ================= */
+/* =======================
+   LOAD EVENTS (SAFE)
+======================= */
 const eventsPath = path.join(__dirname, "events");
-for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"))) {
+for (const file of fs.readdirSync(eventsPath)) {
+  if (!file.endsWith(".js")) continue;
+
   const filePath = path.join(eventsPath, file);
+  const mod = await import(pathToFileURL(filePath).href);
+  const event = mod?.default;
 
-  // ✅ FIX เหมือนกัน
-  const event = await import(pathToFileURL(filePath).href);
+  if (!event || !event.name || typeof event.execute !== "function") {
+    console.warn(`⚠️ Skip event (invalid export): ${file}`);
+    continue;
+  }
 
-  if (event.default?.once) {
-    client.once(event.default.name, (...args) =>
-      event.default.execute(...args, client)
-    );
+  if (event.once) {
+    client.once(event.name, (...args) => event.execute(...args, client));
   } else {
-    client.on(event.default.name, (...args) =>
-      event.default.execute(...args, client)
-    );
+    client.on(event.name, (...args) => event.execute(...args, client));
   }
 }
 
