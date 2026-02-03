@@ -266,18 +266,48 @@ router.post("/api/verify/complete", async (req, res) => {
     });
   }
 
-  // ✅ assign roles via Discord Bot token (API side)
+  // ✅ assign roles via Discord API (MUST CHECK RESPONSE)
   const botToken = process.env.DISCORD_BOT_TOKEN;
   if (!botToken) return res.status(500).json({ error: "missing DISCORD_BOT_TOKEN in API env" });
 
+  const failures = [];
+
   for (const roleId of roleIds) {
-    await fetch(`https://discord.com/api/v10/guilds/${wt.guild_id}/members/${wt.user_id}/roles/${roleId}`, {
+    const url = `https://discord.com/api/v10/guilds/${wt.guild_id}/members/${wt.user_id}/roles/${roleId}`;
+
+    const r = await fetch(url, {
       method: "PUT",
       headers: {
         Authorization: `Bot ${botToken}`
       }
     });
+
+    if (!r.ok) {
+      const body = await r.text().catch(() => "");
+      failures.push({
+        roleId,
+        status: r.status,
+        body
+      });
+    }
   }
+
+  // ✅ ถ้าใส่ role ไม่ผ่าน -> ตอบ error พร้อมเหตุผลจริง
+  if (failures.length > 0) {
+    console.error("Role assign failures:", {
+      guildId: wt.guild_id,
+      userId: wt.user_id,
+      failures
+    });
+
+    return res.status(500).json({
+      error: "assign role failed",
+      guildId: wt.guild_id,
+      userId: wt.user_id,
+      failures
+    });
+  }
+
 
   // ✅ mark verified
   await pool.query(
