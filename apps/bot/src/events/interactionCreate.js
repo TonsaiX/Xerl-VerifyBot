@@ -1,7 +1,5 @@
 // apps/bot/src/events/interactionCreate.js
-// ✅ Button handler: verify_start -> เช็คว่าได้ verify role แล้วไหม -> ถ้าได้แล้วห้ามทำซ้ำ
-// ✅ verify_help -> ตอบวิธีใช้งาน
-// ✅ กันบอท crash ด้วย try/catch
+// ✅ interactionCreate - handle commands + verify buttons
 
 import { Events, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
@@ -9,7 +7,7 @@ export default {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
     try {
-      // ✅ Slash command
+      // Slash command
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) return;
@@ -17,38 +15,32 @@ export default {
         return;
       }
 
-      // ✅ Button
       if (!interaction.isButton()) return;
 
-      // ✅ Help
+      // Help button
       if (interaction.customId === "verify_help") {
         return interaction.reply({
           ephemeral: true,
           content:
             "🆘 วิธี Verify (สั้นๆ)\n" +
-            "1) กดปุ่ม **Verify ตอนนี้**\n" +
+            "1) กด **Verify ตอนนี้**\n" +
             "2) ล็อกอิน Discord\n" +
             "3) ติ๊ก Turnstile\n" +
-            "4) ได้ยศอัตโนมัติ ✅\n\n" +
-            "ถ้าเว็บไม่ขึ้น: ลองปิด Adblock/ลองเบราว์เซอร์อื่น"
+            "4) ได้ยศอัตโนมัติ ✅"
         });
       }
 
-      // ✅ Start verify
+      // Verify button
       if (interaction.customId !== "verify_start") return;
 
       if (!interaction.guildId) {
-        return interaction.reply({ content: "ปุ่มนี้ใช้ในเซิร์ฟเวอร์เท่านั้น", ephemeral: true });
+        return interaction.reply({ ephemeral: true, content: "ปุ่มนี้ใช้ในเซิร์ฟเวอร์เท่านั้น" });
       }
 
-      // =========================
-      // ✅ 1) โหลด verify-config
-      // =========================
+      // ✅ ดึง roleIds ของ guild
       const cfgRes = await fetch(`${process.env.API_BASE_URL}/api/guilds/${interaction.guildId}/verify-config`, {
         method: "GET",
-        headers: {
-          "X-BOT-AUTH": process.env.INTERNAL_BOT_SECRET
-        }
+        headers: { "X-BOT-AUTH": process.env.INTERNAL_BOT_SECRET }
       });
 
       let roleIds = [];
@@ -57,12 +49,9 @@ export default {
         roleIds = Array.isArray(cfg.roleIds) ? cfg.roleIds : [];
       }
 
-      // ✅ ใช้ role ตัวแรกเป็น verify role หลัก (ง่ายสุด)
-      const verifyRoleId = roleIds[0];
+      const verifyRoleId = roleIds[0]; // ✅ ใช้ role ตัวแรกเป็น Verify role หลัก
 
-      // =========================
-      // ✅ 2) ถ้ามี role แล้ว -> ห้ามทำซ้ำ
-      // =========================
+      // ✅ ถ้ามี role แล้วห้ามทำซ้ำ
       if (verifyRoleId) {
         const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
         if (member && member.roles.cache.has(verifyRoleId)) {
@@ -73,9 +62,7 @@ export default {
         }
       }
 
-      // =========================
-      // ✅ 3) create session
-      // =========================
+      // create session
       const res = await fetch(`${process.env.API_BASE_URL}/api/verify/session`, {
         method: "POST",
         headers: {
@@ -90,14 +77,13 @@ export default {
 
       if (!res.ok) {
         const text = await res.text();
-        return interaction.reply({ content: `สร้าง session ไม่สำเร็จ: ${text}`, ephemeral: true });
+        return interaction.reply({ ephemeral: true, content: `สร้าง session ไม่สำเร็จ: ${text}` });
       }
 
       const { sid } = await res.json();
 
-      // ✅ build frontend link from ENV (สำคัญ)
       const FRONT = process.env.FRONTEND_URL;
-      if (!FRONT) throw new Error("FRONTEND_URL missing in bot .env");
+      if (!FRONT) throw new Error("FRONTEND_URL missing in bot env");
 
       const url = `${FRONT.replace(/\/$/, "")}/verify/start?sid=${encodeURIComponent(sid)}`;
 
@@ -116,7 +102,7 @@ export default {
         try {
           return interaction.reply({
             ephemeral: true,
-            content: "ตอนนี้ระบบมีปัญหาชั่วคราว ลองใหม่อีกครั้ง หรือแจ้งแอดมิน"
+            content: "ระบบมีปัญหาชั่วคราว ลองใหม่อีกครั้ง"
           });
         } catch {}
       }
