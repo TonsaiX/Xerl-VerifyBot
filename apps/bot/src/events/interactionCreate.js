@@ -70,7 +70,7 @@ export default {
       const { sid } = await res.json();
 
       // ✅ ลิ้งไปหน้าเว็บ React (localhost ตอนนี้)
-      const url = `http://localhost:5173/verify/start?sid=${encodeURIComponent(sid)}`;
+      const url = `${process.env.FRONTEND_URL}/verify/start?sid=${encodeURIComponent(sid)}`;
 
       // ✅ ส่งปุ่ม link แบบ ephemeral
       const row = new ActionRowBuilder().addComponents(
