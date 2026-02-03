@@ -1,63 +1,61 @@
 // apps/api/src/server.js
-// ✅ Express server + routes + CORS + init DB
+// ✅ Express API สำหรับ Verify flow + Discord OAuth + Turnstile + Assign Roles
+// ✅ สำคัญ: CORS + OPTIONS ต้องผ่าน (ไม่งั้น browser จะ Failed to fetch)
 
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { initDb } from "./db.js";
-
-import verifyConfigRoutes from "./routes/verifyConfig.js";
-import verifyFlowRoutes from "./routes/verifyFlow.js";
+import guildsRouter from "./routes/guilds.js";
+import verifyRouter from "./routes/verifyFlow.js";
 
 const app = express();
 
-// ✅ JSON body
-app.use(express.json());
+// ✅ parse JSON body
+app.use(express.json({ limit: "1mb" }));
 
-// ✅ CORS ให้ React เรียก API ได้
-// ✅ CORS: รองรับทั้ง dev + prod ผ่าน ENV
+// ======================
+// ✅ CORS (prod-ready)
+// ======================
 const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
-  .map(s => s.trim())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // allow non-browser requests
-      if (!origin) return callback(null, true);
+    origin: (origin, cb) => {
+      // ✅ allow non-browser (curl/postman) ที่ไม่มี origin
+      if (!origin) return cb(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+      // ✅ allow whitelist
+      if (allowedOrigins.includes(origin)) return cb(null, true);
 
-      console.log("❌ CORS blocked origin:", origin);
-      return callback(null, false); // ❌ ห้าม throw error
+      // ✅ อย่า throw error (ถ้า throw จะกลายเป็น 500)
+      console.log("❌ CORS blocked:", origin);
+      return cb(null, false);
     },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-BOT-AUTH"],
+    methods: ["GET", "POST", "PUT", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-BOT-AUTH"]
   })
 );
 
-// ✅ สำคัญ: ตอบ OPTIONS ทุก route
+// ✅ สำคัญ: ตอบ OPTIONS ให้หมด
 app.options("*", cors());
 
-
-// ✅ health check
+// ✅ health
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 // ✅ routes
-app.use("/api", verifyConfigRoutes);   // /api/guilds/:guildId/verify-config
-app.use("/api", verifyFlowRoutes);     // /api/verify/session , /api/verify/complete
-app.use("/", verifyFlowRoutes);        // /auth/discord/start , /auth/discord/callback
+app.use("/api", guildsRouter);
+app.use("/", verifyRouter);
 
-// ✅ start server
-const port = Number(process.env.PORT || 3001);
+// ✅ start
+const PORT = Number(process.env.PORT || 3001);
 
 (async () => {
   await initDb();
-  app.listen(port, () => {
-    console.log(`✅ API running on http://localhost:${port}`);
-    console.log(`✅ OAuth redirect_uri: ${process.env.DISCORD_REDIRECT_URI}`);
+  app.listen(PORT, () => {
+    console.log(`✅ API running on http://localhost:${PORT}`);
   });
 })();

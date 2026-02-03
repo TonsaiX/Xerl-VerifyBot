@@ -1,16 +1,25 @@
 // apps/api/src/db.js
-// ✅ สร้าง pg pool + helper init tables
+// ✅ PostgreSQL pool + init schema (ไม่พังถ้า table มีแล้ว)
 
 import pg from "pg";
 const { Pool } = pg;
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+export let pool = null;
 
-// ✅ ฟังก์ชัน init ตาราง (เรียกตอน server start)
+/**
+ * ✅ initDb: connect + ensure tables exist
+ */
 export async function initDb() {
-  // ✅ config roles ต่อ guild
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is missing");
+  }
+
+  pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+  // ✅ test connect
+  await pool.query("SELECT 1");
+
+  // ✅ ensure tables (เหมือน schema.sql แต่ทำให้รันได้เองด้วย)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS guild_verify_config (
       guild_id TEXT PRIMARY KEY,
@@ -19,7 +28,6 @@ export async function initDb() {
     );
   `);
 
-  // ✅ session sid แบบ one-time
   await pool.query(`
     CREATE TABLE IF NOT EXISTS verify_sessions (
       sid TEXT PRIMARY KEY,
@@ -30,14 +38,7 @@ export async function initDb() {
       used BOOLEAN NOT NULL DEFAULT FALSE
     );
   `);
-  // ✅ กัน schema เก่าที่สร้างไว้ก่อนมี expected_user_id
-    await pool.query(`
-    ALTER TABLE verify_sessions
-    ADD COLUMN IF NOT EXISTS expected_user_id TEXT NOT NULL DEFAULT '';
-    `);
 
-
-  // ✅ oauth state map
   await pool.query(`
     CREATE TABLE IF NOT EXISTS oauth_states (
       state TEXT PRIMARY KEY,
@@ -46,7 +47,6 @@ export async function initDb() {
     );
   `);
 
-  // ✅ token สำหรับเว็บ (หลัง callback) เพื่อไปทำ turnstile ต่อ
   await pool.query(`
     CREATE TABLE IF NOT EXISTS web_verify_tokens (
       token TEXT PRIMARY KEY,
@@ -58,7 +58,6 @@ export async function initDb() {
     );
   `);
 
-  // ✅ ผู้ใช้ verify แล้ว
   await pool.query(`
     CREATE TABLE IF NOT EXISTS verified_users (
       guild_id TEXT NOT NULL,

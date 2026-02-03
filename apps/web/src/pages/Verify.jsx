@@ -1,38 +1,34 @@
 // apps/web/src/pages/Verify.jsx
-// ✅ Clean Verify Page (minimal copy + สบายตา)
+// ✅ หน้า Verify: รับ token จาก query -> Turnstile -> POST complete ไป API
 
 import React, { useEffect, useMemo, useState } from "react";
 import { apiPost } from "../api.js";
 
 export default function Verify() {
-  const [status, setStatus] = useState("ready"); // ready | working
+  const [status, setStatus] = useState("ready");
   const [error, setError] = useState("");
   const [tsToken, setTsToken] = useState("");
 
-  // ✅ token จาก query (มาจาก API callback)
   const token = useMemo(() => new URL(window.location.href).searchParams.get("token") || "", []);
 
   useEffect(() => {
-    // ✅ ถ้าไม่มี token -> ไป error
     if (!token) {
       window.location.href = "/error?m=" + encodeURIComponent("Missing token");
       return;
     }
 
-    // ✅ Turnstile callback: ได้ token แล้วถือว่าผ่าน
+    // ✅ Turnstile callbacks
     window.__xerlTurnstileOk = (t) => {
       setTsToken(t);
       setError("");
     };
-
-    // ✅ Turnstile expired / error
     window.__xerlTurnstileExpired = () => setTsToken("");
     window.__xerlTurnstileError = () => {
       setTsToken("");
       setError("Turnstile โหลดไม่สำเร็จ (เช็ค domain/ส่วนขยายบล็อกโฆษณา)");
     };
 
-    // ✅ โหลดสคริปต์ครั้งเดียว (กัน StrictMode dev ลบ)
+    // ✅ Load script once
     if (!document.querySelector('script[data-xerl-turnstile="1"]')) {
       const s = document.createElement("script");
       s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
@@ -56,7 +52,7 @@ export default function Verify() {
     try {
       const out = await apiPost("/api/verify/complete", {
         token,
-        turnstileToken: tsToken,
+        turnstileToken: tsToken
       });
 
       window.location.href = "/verified?g=" + encodeURIComponent(out.guildId);
@@ -67,8 +63,6 @@ export default function Verify() {
   }
 
   const ready = Boolean(tsToken);
-  const statusText = ready ? "พร้อมแล้ว" : "ยังไม่ผ่าน";
-  const statusClass = ready ? "stateOk" : "stateBad";
 
   return (
     <div className="page">
@@ -78,23 +72,18 @@ export default function Verify() {
             <div className="badge">🔐</div>
             <h1 className="h1">ยืนยันตัวตน</h1>
           </div>
-
-          {/* ✅ คำอธิบายสั้น ๆ พอดี ไม่ยาว */}
-          <p className="sub">
-            ทำ 2 ขั้นตอน: ล็อกอิน Discord แล้วติ๊ก Turnstile — เสร็จแล้วระบบจะให้ยศอัตโนมัติ
-          </p>
+          <p className="sub">ล็อกอิน Discord แล้วติ๊ก Turnstile — เสร็จแล้วระบบจะให้ยศอัตโนมัติ</p>
         </div>
 
         <div className="cardBody">
-          {/* ✅ เล็ก ๆ พอ: แสดงสถานะ */}
           <div className="pillRow">
             <div className="pill">Discord Login ✓</div>
             <div className="pill">
-              Turnstile: <span className={statusClass}>{statusText}</span>
+              Turnstile:{" "}
+              <span className={ready ? "stateOk" : "stateBad"}>{ready ? "พร้อมแล้ว" : "ยังไม่ผ่าน"}</span>
             </div>
           </div>
 
-          {/* ✅ Turnstile widget */}
           <div
             className="cf-turnstile"
             data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
@@ -107,9 +96,9 @@ export default function Verify() {
             <button className="btn" onClick={onSubmit} disabled={status === "working"}>
               {status === "working" ? "กำลังตรวจสอบ..." : "ยืนยัน"}
             </button>
-
             <div className="miniStatus">
-              สถานะ: <b className={statusClass}>{ready ? "พร้อมยืนยัน" : "รอ Turnstile"}</b>
+              สถานะ:{" "}
+              <b className={ready ? "stateOk" : "stateBad"}>{ready ? "พร้อมยืนยัน" : "รอ Turnstile"}</b>
             </div>
           </div>
 
@@ -117,10 +106,8 @@ export default function Verify() {
         </div>
 
         <div className="footer">
-          <span>Secure Verify • localhost</span>
-          <a className="mutedLink" href="/" title="กลับหน้าแรก">
-            กลับหน้าแรก
-          </a>
+          <span>Secure Verify</span>
+          <a className="mutedLink" href="/">กลับหน้าแรก</a>
         </div>
       </div>
     </div>

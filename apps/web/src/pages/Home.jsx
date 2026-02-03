@@ -1,28 +1,30 @@
 // apps/web/src/pages/Home.jsx
-// ✅ หน้ากลาง: ถ้ามี sid ใน query ให้ redirect ไป API oauth start
+// ✅ หน้าแรกเรียบๆ
 
-import React, { useEffect } from "react";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+import React from "react";
 
 export default function Home() {
-  useEffect(() => {
-    // ✅ ถ้าเข้าผ่านลิ้ง verify/start?sid=...
-    const url = new URL(window.location.href);
-    const sid = url.searchParams.get("sid");
-
-    // ✅ ถ้ามี sid → ไปเริ่ม OAuth ที่ API
-    if (window.location.pathname === "/verify/start" && sid) {
-      window.location.href = `${API_BASE_URL}/auth/discord/start?sid=${encodeURIComponent(sid)}`;
-    }
-  }, []);
-
   return (
-    <div className="container">
-      <h1>Verify Portal (localhost)</h1>
-      <p className="small">
-        หน้านี้ใช้สำหรับ Verify จาก Discord เท่านั้น — กรุณากดปุ่ม Verify ในเซิร์ฟเวอร์ของคุณ
-      </p>
+    <div className="page">
+      <div className="card">
+        <div className="cardHeader">
+          <div className="titleRow">
+            <div className="badge">🛡️</div>
+            <h1 className="h1">Secure Verify</h1>
+          </div>
+          <p className="sub">หน้านี้เอาไว้รองรับลิ้ง Verify จากบอท</p>
+        </div>
+        <div className="cardBody">
+          <div className="pillRow">
+            <div className="pill">กด Verify จาก Discord</div>
+            <div className="pill">แล้วระบบจะพามาที่นี่</div>
+          </div>
+        </div>
+        <div className="footer">
+          <span>Secure Verify</span>
+          <a className="mutedLink" href="/error?m=Use%20Discord%20Verify">ช่วยเหลือ</a>
+        </div>
+      </div>
     </div>
   );
 }

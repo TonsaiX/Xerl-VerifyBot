@@ -2,14 +2,15 @@
   "name": "xerl-verify",
   "private": true,
   "workspaces": [
-    "apps/bot",
     "apps/api",
+    "apps/bot",
     "apps/web"
   ],
   "scripts": {
     "dev:api": "npm --workspace apps/api run dev",
     "dev:web": "npm --workspace apps/web run dev",
     "dev:bot": "npm --workspace apps/bot run dev",
-    "dev": "echo \"Run 3 terminals: dev:api, dev:web, dev:bot\""
+    "register": "npm --workspace apps/bot run register",
+    "build:web": "npm --workspace apps/web run build"
   }
 }

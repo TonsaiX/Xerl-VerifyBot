@@ -1,3 +1,6 @@
+// apps/bot/src/index.js
+// ✅ Discord bot main (Windows ESM safe)
+
 import "dotenv/config";
 import { Client, Collection, GatewayIntentBits } from "discord.js";
 import fs from "node:fs";
@@ -7,44 +10,29 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
-});
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+// ✅ commands map
 client.commands = new Collection();
 
-/* ================= COMMANDS ================= */
+// ✅ load commands
 const commandsPath = path.join(__dirname, "commands");
-for (const file of fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"))) {
+for (const file of fs.readdirSync(commandsPath).filter((f) => f.endsWith(".js"))) {
   const filePath = path.join(commandsPath, file);
-
-  // ✅ FIX: Windows ESM ต้องแปลงเป็น file://
-  const command = await import(pathToFileURL(filePath).href);
-
-  client.commands.set(command.data.name, command);
+  const mod = await import(pathToFileURL(filePath).href);
+  client.commands.set(mod.data.name, mod);
 }
 
-/* ================= EVENTS ================= */
+// ✅ load events
 const eventsPath = path.join(__dirname, "events");
-for (const file of fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"))) {
+for (const file of fs.readdirSync(eventsPath).filter((f) => f.endsWith(".js"))) {
   const filePath = path.join(eventsPath, file);
+  const ev = await import(pathToFileURL(filePath).href);
 
-  // ✅ FIX เหมือนกัน
-  const event = await import(pathToFileURL(filePath).href);
-
-  if (event.default?.once) {
-    client.once(event.default.name, (...args) =>
-      event.default.execute(...args, client)
-    );
-  } else {
-    client.on(event.default.name, (...args) =>
-      event.default.execute(...args, client)
-    );
-  }
+  if (ev.default?.once) client.once(ev.default.name, (...args) => ev.default.execute(...args, client));
+  else client.on(ev.default.name, (...args) => ev.default.execute(...args, client));
 }
 
-client.once("ready", () => {
-  console.log(`✅ Bot logged in as ${client.user.tag}`);
-});
+client.once("ready", () => console.log(`✅ Bot logged in as ${client.user.tag}`));
 
 client.login(process.env.DISCORD_BOT_TOKEN);
